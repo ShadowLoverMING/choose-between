@@ -1,0 +1,188 @@
+/**********************************************光立512个led灯全亮测试程序*******************************************/
+
+#include <STC12C5A60S2.H>//包含头文件 STC12C5A60S2.H 
+//STC单片机的头文件可以使用STC-ISP下载软件添加到Keil编译软件中使用（参考STC官方下程序下载软件使用手册载）
+#define uchar unsigned char  //宏定义uchar数据类型
+#define uint unsigned int//宏定义uint数据类型
+uchar data buffer[8]; //光立方显示一层的数据暂存数组
+/*定义管脚定义单片机用于发送数据给74HC595引脚和数据移位控制*/
+sbit SH_CP = P3^4; //SCK
+sbit ST_CP = P3^3;//RCK
+sbit DS    = P3^5;//SER
+sbit CH340 = P0^3;//SE
+sbit SH_CP2 = P2^6; //SCK2
+sbit ST_CP2 = P2^5;//RCK2
+sbit DS2    = P2^3;//SER2
+sbit RR=P3^6;//红
+sbit GG=P2^2;//绿
+sbit BB=P2^4;//蓝
+uchar code display[8][8]={		 //用于显示光立方体的显示图形数据（二维数组8行8列）一行8个16进制数，64位控制一层64个LED
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第1层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第2层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第3层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第4层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第5层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第6层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第7层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第8层
+};
+/*---------------   初始化   --------------*/
+void initial595()	 //列驱动初始化
+{
+		SH_CP = 0;
+		ST_CP = 0;
+		DS = 0;
+}
+  void initial5952() //行驱动初始化
+{
+		SH_CP2 = 0;
+		ST_CP2 = 0;
+		DS2 = 0;
+}
+/************************************延时函数**************************************************************/
+void delay(uint i)
+{											
+		char b=10;
+		while (i--)
+		{
+			while(b--);
+		}
+}
+/************************************ 发送数据 ***************************************************************/
+void send_data(unsigned char d)//发送一层当中的一行显示数据，8位
+{
+		unsigned char i;
+		for(i=0;i<8;i++)
+		{
+			DS = d&0x80;//发送最低位
+			SH_CP = 1;
+			SH_CP = 0; //移位寄存器移位
+			d = d<<1; //数据移位f
+		}
+}
+
+void xiansi1()		              //一次发送1层，8行的显示数据，64位
+{	
+		send_data(buffer[0]);	  //u9
+		send_data(buffer[1]);	  //u8
+		send_data(buffer[2]);	  //u7
+		send_data(buffer[3]);	  //u6
+		send_data(buffer[4]);	  //u5
+		send_data(buffer[5]);	  //u4
+		send_data(buffer[6]);	  //u3
+		send_data(buffer[7]);	  //u2
+
+} 
+/*************************************************主函数*******************************************************************/
+void main()
+{  	   
+	   uchar d,dd,i,j,cheng;	   
+	   initial595();
+	   initial5952();
+	   RR=0;  //红色控制
+	   GG=1;  //绿色控制
+	   BB=1;  //蓝色控制
+	   d=60000;
+	   dd=60000;
+	   while(dd--)
+	   {
+	   while(d--)
+	  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=display[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //层移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;       
+					delay(2);
+		}
+	     
+
+	   }
+	   }
+
+	   RR=1;  //红色控制
+	   GG=0;  //绿色控制
+	   BB=1;  //蓝色控制
+	   d=60000;
+	   dd=60000;
+	   while(dd--)
+	   {
+	   while(d--)
+	  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=display[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //层移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;       
+					delay(2);
+		}
+	     
+
+	   }
+	   }
+	   RR=1;  //红色控制
+	   GG=1;  //绿色控制
+	   BB=0;  //蓝色控制
+	   d=60000;
+	   dd=60000;
+	   while(dd--)
+	   {
+	   while(d--)
+	  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=display[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //层移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;       
+					delay(2);
+		}
+	     
+
+	   }
+	   }
+}
