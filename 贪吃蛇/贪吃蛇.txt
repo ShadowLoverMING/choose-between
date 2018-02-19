@@ -1,0 +1,680 @@
+#include <STC12C5A60S2.H>
+#include <intrins.h>
+#include <stdio.h>
+#include <stdlib.h>	
+#include <hc595.h>	 
+#define MaxLength 20
+/************************************************************************/
+#define LENG 8
+uchar xdata game [LENG][LENG][LENG];
+uchar xdata grand[10]={1000,900,800,700,600,500,400,300,200,100};
+int LEVEL1=9;
+int finshflag=0;
+int pauseflag=0;
+void key2();
+int rush=0;
+int rush2=0;
+uchar xdata display_r[8][8]={0}; 	   //色光数组
+uchar xdata display_b[8][8]={0};
+uchar currentColor = 1;
+uchar layerBuffer = 0x01;
+sbit GG=P3^4;
+sbit RR=P3^5;
+sbit BB=P3^6;
+sbit k4=P0^7;
+sbit k2=P0^5;
+uchar layer = 0;
+int reset=0;
+uchar data irtime=0;
+uchar startflag;//开始标志
+uchar data irdata[33];//数据一共33位加上引导码
+uchar bitnum;
+uchar irreceok;//接收一帧数据完成
+uchar ircode[4];//4个字节的数据
+uchar irprosok;//处理完成
+void drawPoint(int x, int y, int z,int color);
+void food();
+void delete_tail();
+void delete_tail2();
+int food_x,food_y,food_z;
+enum points{UP , DOWN , LEFT , RIGHT,FORTH,BACK};
+enum points point = RIGHT;
+
+enum points2{UP2 , DOWN2 , LEFT2 , RIGHT2,FORTH2,BACK2};
+enum points2 point2 = LEFT2;
+
+typedef struct  Snake{
+	uchar x[MaxLength]; //蛇身节点的横坐标  
+    uchar y[MaxLength]; //蛇身节点的纵坐标  
+    uchar z[MaxLength]; //蛇节点  
+    uchar length;//蛇长度
+	
+}Snake;
+xdata Snake snake={{0},{0},{0},0};
+xdata Snake snake2={{0},{0},{0},0};
+
+void delay2(uint t)				  //延时
+{
+	int i;
+	while(t--)
+	for(i=0;i<5;i++);
+}
+
+void init(){						   //游戏初始化
+	int i, k,j;
+	for(i = 0 ; i < LENG ; i++){
+		for(j = 0 ; j < LENG ; j++){
+			for(k = 0 ; k < LENG ; k++){
+			 game[i][j][k] = 0;
+			}
+		}
+	}
+for(i=0;i<20;i++){
+	 snake.x[i]	=0;
+	 snake.y[i]	=0;
+	 snake.z[i]	=0;
+	 snake2.x[i]=0;
+	 snake2.y[i]=0;
+	 snake2.z[i]=0;
+}
+snake.length=0;
+snake2.length=0;
+}
+void eaten(int x,int y,int z,int n){	  //蛇被吃函数设置
+int i ;
+		k2=0;
+		delay2(10000);
+		k2=1;		
+	 if(n==1){
+		 for(i=0;snake.x[i]!=x&&snake.y[i]!=y&&snake.z[i]!=z;i++);
+		 i++;
+		 for(i;i>0;i--)delete_tail();
+		  }
+	if(n==2){
+		 for(i=0;snake2.x[i]!=x&&snake2.y[i]!=y&&snake2.z[i]!=z;i++);
+		 i++;
+		 for(i;i>0;i--)delete_tail2();
+		  }
+}
+void finsh(int n){				 //游戏结束函数设置	
+	int i,j,k;
+	for(i = 0 ; i < LENG ; i++){
+		for(j = 0 ; j < LENG ; j++){
+			for(k = 0 ; k < LENG ; k++){
+			 if(game[i][j][k] == 0){
+				 game[i][j][k] =n;
+			 }
+
+			}
+		}
+	}
+}
+void add_head(int a, int b, int c){		  //蛇1增加头
+	
+	if(game[a][b][c]==1){
+		k4=0;
+	delay2(10000);
+    	k4=1; 
+		finshflag=1;
+		finsh(1);
+	}
+	if(game[a][b][c]==2){		
+		eaten(a,b,c,2);
+	}
+ 	game[a][b][c]=1;	          
+          snake.x[snake.length]=a;  
+          snake.y[snake.length]=b;
+		  snake.z[snake.length]=c;   
+        snake.length++;//节点个数加1  
+}//添加点至头部使蛇看起来在向前走 
+void add_head2(int a, int b, int c){	   //蛇2增加头
+	
+	if(game[a][b][c]==1){
+		
+		eaten(a,b,c,1);
+	}
+	if(game[a][b][c]==2){
+		k4=0;
+	delay2(10000);
+	k4=1; 
+
+		finshflag=1;
+		finsh(2);
+	}
+ 	game[a][b][c]=2;	          
+          snake2.x[snake2.length]=a;  
+          snake2.y[snake2.length]=b;
+		  snake2.z[snake2.length]=c;  
+        snake2.length++;    //节点个数加1  
+}
+
+void delete_tail(){	  //蛇一
+int i;
+	game[snake.x[0]][snake.y[0]][snake.z[0]]=0;
+	for(i=0;i<snake.length;i++)  //依次向尾部方向移动蛇各个节点的坐标  
+        {  
+          snake.x[i]=snake.x[i+1];  
+          snake.y[i]=snake.y[i+1];  
+          snake.z[i]=snake.z[i+1];  
+        }  
+     snake.length--;             
+}//删除尾部使蛇看起来在向前走 
+
+void delete_tail2(){   //蛇二
+int i;
+	game[snake2.x[0]][snake2.y[0]][snake2.z[0]]=0;
+	for(i=0;i<snake2.length;i++)  //依次向尾部方向移动蛇各个节点的坐标  
+        {  
+          snake2.x[i]=snake2.x[i+1];  
+          snake2.y[i]=snake2.y[i+1];  
+          snake2.z[i]=snake2.z[i+1];  
+        }  
+     snake2.length--;     
+  
+        
+}
+
+
+void food(){
+	
+	do{
+		food_x = rand()%7+1;//使得随机数在1到8的范围 
+	    food_y = rand()%7+1;
+		food_z = rand()%7+1;
+	}while(game[food_x][food_y][food_z] == 1||game[food_x][food_y][food_z] == 2);
+	game[food_x][food_y][food_z] = 3;
+}//随机的食物 
+/*
+void renew(){
+	int times=0;
+	current = head->next->next;
+	while(current->next != NULL){
+		current = current->next;
+		times++;
+	}
+	while(times--){
+		current = current->prior;
+		current->next = NULL;
+		free(current->next);
+	}
+}
+*/
+
+ void delay(int t)
+{
+	int tt;
+	while(t--)
+		for(tt=0;tt<10;tt++);
+}
+
+void move(){		//使蛇自动朝当前方向前进，控制蛇1
+
+	if(!pauseflag&&!finshflag){
+	int a = snake.x[snake.length-1];
+	int b = snake.y[snake.length-1];
+	int c = snake.z[snake.length-1];
+
+	switch(point){
+	case UP: {
+		c++;
+		if(c>7)c=0;
+		break; }
+
+	case DOWN: {
+		c--;
+		if(c<0)c=7;
+		break; }
+
+	case RIGHT: {
+		a++; 
+		if(a>7)a=0;
+		break;
+			  }
+	case LEFT: {
+		a--;
+		if(a<0)a=7;
+		break;
+			  }
+	case FORTH: {
+		b++; 
+		if(b>7)b=0;
+		break;
+			  }
+	case BACK: {
+		b--;
+		if(b<0)b=7;
+		break;
+			  }
+	}
+
+	if(a == food_x && b == food_y&&c == food_z){
+	   k2=0;
+		delay2(10000);
+		k2=1;
+		
+		add_head(a,b,c);
+	
+		food();
+		
+		return;
+	}//吃到食物了 
+	add_head(a,b,c);
+	delete_tail();
+	}
+	
+	
+
+}
+
+void move2(){		 //使蛇自动朝当前方向前进，控制蛇2
+
+	if(!pauseflag&&!finshflag){
+	int a = snake2.x[snake2.length-1];
+	int b = snake2.y[snake2.length-1];
+	int c = snake2.z[snake2.length-1];
+
+	switch(point2){
+	case UP2: {
+		c++;
+		if(c>7)c=0;
+		break; }
+
+	case DOWN2: {
+		c--;
+		if(c<0)c=7;
+		break; }
+
+	case RIGHT2: {
+		a++; 
+		if(a>7)a=0;
+		break;
+			  }
+	case LEFT2: {
+		a--;
+		if(a<0)a=7;
+		break;
+			  }
+	case FORTH2: {
+		b++; 
+		if(b>7)b=0;
+		break;
+			  }
+	case BACK2: {
+		b--;
+		if(b<0)b=7;
+		break;
+			  }
+	}
+
+	if(a == food_x && b == food_y&&c == food_z){
+		k2=0;
+		delay2(10000);
+		k2=1;
+	
+		add_head2(a,b,c);
+	
+		food();
+		
+		return;
+	}//吃到食物了 
+	add_head2(a,b,c);
+	delete_tail2();
+	}	
+}
+void setBit(uchar *target, uint bitnum, uint value)		//设置灯亮
+{
+	if (value)
+	{
+		*target = *target | (_crol_(0x01,bitnum));
+	}
+	else
+	{
+		*target = *target & (_crol_(0xFE,bitnum));
+	}
+}
+void drawPoint(int x, int y, int z,int color) //配合setColor使用 ，绘制亮灯位置
+{
+	if (x<8 && y<8 && z<8 && x>=0 && y>=0 && z>=0)
+	{
+		if(color==1){
+		setBit(&display_r[z][y], x, 1);
+		setBit(&display_b[z][y], x, 0);
+		}
+		if(color==2){
+		setBit(&display_b[z][y], x, 1);
+		setBit(&display_r[z][y], x, 0);
+		}
+		if(color==3){
+		setBit(&display_b[z][y], x, 1);
+		setBit(&display_r[z][y], x, 1);
+		}
+	}
+}
+void initdisplay()	  //色光数组初始化
+{
+	int i1,j1;
+	for (i1 = 0; i1 < 8; ++i1)
+	{
+		for (j1 = 0; j1 < 8; ++j1)
+		{
+				display_r[i1][j1]=0x00;
+				display_b[i1][j1]=0x00;
+								
+			}
+		}
+	}
+
+void show()			//亮灯
+{
+	int i,j,k;
+	for (i = 0; i < 8; i++)
+	{
+		for (j = 0; j < 8; j++)
+		{
+			for (k = 0; k < 8; k++)
+			{
+				if (game[i][j][k]==1)// 蛇1
+				{
+					
+					drawPoint(i,j,k,1);
+				}
+				else if (game[i][j][k]==2)	//蛇2
+				{
+					
+					drawPoint(i,j,k,2);
+				}
+				if (game[i][j][k]==3)// food
+				{					
+					drawPoint(i,j,k,3);
+				}
+				
+			}
+		}
+	}
+}
+void timer_init(void)
+{
+	TMOD=0X12;	
+	//IE=0X8B;
+	EX0=1;
+	ET0=1;		 	        
+	EX1=0;
+	ET1=1;
+	//ADC_CONTR=0x88;
+	TR1=1;
+	EA=1;
+	TH1=0xc0;
+	TL1=0;	
+   	IPH|=0X01;
+	PX0=1;
+	IT0=1;
+    P1M0=0XF0;
+	P1M1=0X0F;
+    P0M0=0xf8;
+	P0M1=0xf0;	
+    P3M0=0x00;
+	P3M1=0X00;
+	P2M0=0x00;
+	P2M1=0X00;
+}
+
+void main(){
+	while(1){
+	k4=0;
+	delay2(10000);
+	k4=1;
+	timer_init();		   //初始化
+	init();
+   	init_595();
+   	init_595_2();
+   	initdisplay();	     	
+	
+	add_head(2,2,7);//蛇1的初始蛇身  
+	add_head(3,2,7);  	
+	add_head(4,2,7);
+	add_head(5,2,7);
+	add_head(6,2,7); 
+
+	add_head2(7,6,7);//蛇2的初始蛇身 
+	add_head2(6,6,7);  	
+	add_head2(5,6,7);
+	add_head2(4,6,7);
+	add_head2(3,6,7);
+		
+	reset=0;
+	food();
+	show();
+	
+	delay(100000*grand[LEVEL1]);
+	 
+	while(1){
+	
+		initdisplay(); 		
+		key2();	
+		if(reset==1)break;
+		if(rush==1)move();	   //设置加速
+		if(rush2==1)move2();
+		move();
+		move2();
+		show();		   	
+		rush=0;
+		rush2=0;
+		delay(100000*grand[LEVEL1]);
+	} 
+	}
+}
+void timer1() interrupt 3 //
+{ 	
+	int ii;
+	TR1=0;
+	TH1=0xFE;
+	TL1=0x00;
+
+	// red
+	if(currentColor==1)
+	{
+		DS2=~layerBuffer&0x01;
+		SH_CP2=1;
+		SH_CP2=0;
+
+		ST_CP2=1;
+		ST_CP2=0;
+
+	    for(ii=0; ii<8; ii++)
+		{	 
+			send_data(display_r[layer][ii]);
+		}
+
+		RR=0;
+		GG=1;
+		BB=1;
+
+		ST_CP=1;
+		ST_CP=0;
+
+		currentColor++;
+	}
+	// blue
+	else if(currentColor==2)
+	{
+	    for(ii=0; ii<8; ii++)
+		{
+			send_data(display_b[layer][ii]);
+		}
+
+		RR=1;
+		GG=1;
+		BB=0;
+
+		ST_CP=1;
+		ST_CP=0;
+
+		currentColor++;
+	}
+
+	//off
+	else if(currentColor==3) 
+	{
+		RR=1;
+		GG=1;
+		BB=1;
+
+	    layerBuffer=_cror_(layerBuffer,1);
+		layer++;
+
+		if (layer>7)
+		{
+			layer = 0;
+		}
+
+		currentColor=1;
+	}
+	 
+	TR1=1;
+	
+}
+void irwork()
+{
+		 switch (ircode[2]*2)
+		  {
+		    case 0x1c:			   
+			         if(point!=BACK&&point!=FORTH){point = FORTH;break;	}
+					 if(point==FORTH){   rush=1;break;	} 
+					 
+			case 0x52 : 				
+			         if(point!=FORTH&&point!=BACK){point = BACK;					  
+					  break; }
+					 if(point==BACK){   rush=1;break;	}
+
+					
+			case 0x42 :				
+		              if(point!=RIGHT&&point!=LEFT){
+					  point = LEFT;
+					  break;
+					  }
+					 if(point==LEFT){   rush=1;break;	}
+			case 0x4a: 					  
+				        if(point!=LEFT&&point!=RIGHT){point = RIGHT;					
+					    break; }
+						if(point==RIGHT){rush=1;break;}
+			case 0x08:				
+			         if(point!=DOWN&&point!=UP){point = UP;
+				  break; }
+				  if(point==UP){rush=1;break;}
+		 	case 0x5a :			
+		            if(point!=UP&&point!=DOWN){point = DOWN;
+				  break;				}
+				  if(point==DOWN){rush=1;break;}
+		  /* 	case 0x15 :				
+			        LEVEL1++;if(LEVEL1>=9)LEVEL1=9;
+					  break;
+		   	case 0x07 :				 
+			         LEVEL1--;if(LEVEL1<=0)LEVEL1=0;
+					  break;
+			*case 0x43 :				  
+			         pauseflag=!pauseflag;
+					  break;  */				    
+		   case 0x16:			   
+			        if(point2!=BACK2&&point2!=FORTH2){point2 = FORTH2;break;	}
+					 if(point2==FORTH2){   rush2=1;break;	}	 
+
+					
+			case 0x18 : 				
+			          if(point2!=FORTH2&&point2!=BACK2){point2 = BACK2;					  
+					  break; }
+					 if(point2==BACK2){   rush2=1;break;	}
+			case 0x0c :				
+		               if(point2!=RIGHT2&&point2!=LEFT2){
+					  point2 = LEFT2;
+					  break;
+					  }
+					 if(point2==LEFT2){   rush2=1;break;	}
+			case 0x5e: 					  
+				       if(point2!=LEFT2&&point2!=RIGHT2){point2 = RIGHT2;					
+					    break; }
+						if(point2==RIGHT2){rush2=1;break;}
+			case 0x40:				
+			          if(point2!=DOWN2&&point2!=UP2){point2 = UP2;
+				  break; }
+				  if(point2==UP2){rush2=1;break;}
+		 	case 20 :			
+		            if(point2!=UP2&&point2!=DOWN2){point2 = DOWN2;
+				  break;				}
+				  if(point2==DOWN2){rush2=1;break;}
+			case 0x44 : reset=1;break;
+}
+}
+void irpros()	   //处理函数
+{
+	uchar k,i,j;
+	uchar value;
+	k=1;
+	for(j=0;j<4;j++)
+	{
+		for(i=0;i<8;i++)
+		{		
+			if(irdata[k]>10)//时间长度等于1.125ms就是0 等于2.25ms就是1；
+				{
+				value=value|0x80;
+				}
+				else
+				{
+				value=value;
+				}
+				if(i<8)
+				{
+					value=value>>1;	
+				}
+				k++;
+		}
+	ircode[j]=value;//ircode[j]返回的是十六进制数。
+	value=0;
+	}
+	irprosok=1;	
+}
+
+void timer0 () interrupt 1
+{  
+  	irtime++;
+}
+void int0 () interrupt 0
+{	
+    TH0=0;
+	TL0=0;
+	TR0=1;
+	if(startflag)
+	{
+		if(irtime<126&&irtime>=100)//检测引导码9ms
+		{
+			bitnum=0;
+		}
+		irdata[bitnum]=irtime;
+		irtime=0;
+		bitnum++;
+		if(bitnum==33)
+		{
+			bitnum=0;
+			irreceok=1;
+		}
+			
+	}
+	else
+	{
+		startflag=1;
+		irtime=0;	
+	}
+ 
+}
+void key2()
+{
+ 	if(irreceok)   //接收数据完成
+		{
+		irpros();  //处理函数
+		irreceok=0;
+		}
+	if(irprosok)  //处理完成
+		{
+		irwork();  //按键确认
+		irprosok=0;		
+        }
+}
