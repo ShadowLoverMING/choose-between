@@ -1,0 +1,147 @@
+/******************************呼吸灯测试程序*******************************/
+#include <STC12C5A60S2.H>
+#define uchar unsigned char
+#define uint unsigned int
+/*定义管脚*/
+sbit SH_CP = P3^4;//SCK
+sbit ST_CP = P3^3;//RCK
+sbit DS    = P3^5;//SER
+sbit SH_CP2 = P2^6; //SCK2
+sbit ST_CP2 = P2^5;//RCK2
+sbit DS2    = P2^3;//SER2
+sbit RR=P3^6;//红
+sbit GG=P2^2;//绿
+sbit BB=P2^4;//蓝
+sbit ABL=P4^3;//亮度
+char data bb;
+/*****************   初始化   *******************/
+void initial595()
+	{	
+	    SH_CP = 0;
+		ST_CP = 0;
+		DS = 0;
+    }
+  void initial5952()
+	{	
+	    SH_CP2 = 0;
+		ST_CP2 = 0;
+		DS2 = 0;
+    }
+void delay(uint i)
+{											
+	char b;
+	while (i--)
+	{
+		b=bb;
+		 while(b--);
+	}
+}
+
+void huxi ()
+{
+	while(1)
+	{
+			uchar j;uint i;
+		for(j=0;j<64;j++)
+		{	DS = 0;
+			SH_CP = 1;
+			SH_CP = 0;
+		}
+			ST_CP = 1;
+			ST_CP = 0:
+		for(j=0;j<8;j++)
+		{	DS2 = 0;
+			SH_CP2 = 1;
+			SH_CP2 = 0;
+		}
+			ST_CP2 = 1;
+			ST_CP2 = 0;
+		for(i=0;i<1000;i++)
+		{
+			BB=0;
+			delay(i);
+			BB=1;
+			delay(1000-i);
+		if(i<400)
+		    { 
+				j=2;
+				while(j--)
+				{
+					BB=0;
+					delay(i);
+					BB=1;
+					delay(1000-i);
+				}
+		    }
+		}
+	  for(i=0;i<1000;i++)
+		{
+			BB=0;
+			delay(1000-i);
+			BB=1;
+			delay(i);
+		if(i>400)
+			{
+				j=2;
+				while(j--)
+				{
+					BB=0;
+					delay(1000-i);
+					BB=1;
+					delay(i);
+				}
+			}
+		}
+	}
+}
+
+void main()
+{
+		bb=3;
+		initial595();
+		initial5952();
+	while(1)
+	{
+		huxi();
+		
+	}
+}
+
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
