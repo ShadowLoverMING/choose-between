@@ -1,0 +1,266 @@
+/*************************************wifi通讯测试程序************************************************/
+#include <STC12C5A60S2.H>//包含头文件 STC12C5A60S2.H 
+//STC单片机的头文件可以使用STC-ISP下载软件添加到Keil编译软件中使用（参考STC官方下程序下载软件使用手册载）
+#define uchar unsigned char 
+#define uint unsigned int
+uchar data buffer[8]; //数组
+uchar display[8][8];
+sbit RR=P3^6;//红
+sbit GG=P2^2;//绿
+sbit BB=P2^4;//蓝
+sbit k1=P0^4;//播放、暂停
+sbit k2=P0^5;//音量减
+sbit k3=P0^6;//音量加
+sbit ABL=P4^3;//亮度
+uchar data rxcnt=0;
+char data bb,cheng,yanse;  //sa串口中断，bb延时变量，
+unsigned char cube_frame[73];//一帧cube_frame数据73字节,当然这里的数组替换为你程序中的相应数组
+unsigned char byte_cnt=0;//接受到的字节数
+unsigned char cmd_type=0;//接受到命令类型,可能是动画下载,进入音频模式等..
+bit receive_sta=0;        //接受状态,表示数据是否接受完成
+void disp_cube(unsigned char DZ_data[64]);	
+void timer0init(void)
+{
+			TMOD=0X12;			 	        
+			EX1=0;
+			ET1=1;//定时器1开中断 		               
+			EA=1;		
+			IPH|=0X01;
+			PX0=1;
+			IT0=1;
+			P0M0=0xf8;	//P0口开漏输出
+			P0M1=0xf0;	
+			P3M0=0x00;	//P3准双向输出
+			P3M1=0X00;
+			P2M0=0x00;	//P2准双向输出
+			P2M1=0X00;
+			
+}
+
+/*************************************************************************************************************************/
+void delay(int i)// 延时 bb速度控制
+{											
+	char b;
+	while (i--)
+	{
+	   b=bb;
+	   while(b--);
+	}
+}
+
+void delay2(uint t)
+{
+	int i;
+	while(t--)
+	for(i=0;i<5;i++);
+}
+/*************************************************************************************************************************/
+/******************************************74HC595数据发送函数************************************************************/
+/*************************************************************************************************************************/
+sbit SH_CP = P3^4; //SCK
+sbit ST_CP = P3^3;//RCK
+sbit DS    = P3^5;//SER
+sbit SH_CP2 = P2^6; //SCK2
+sbit ST_CP2 = P2^5;//RCK2
+sbit DS2    = P2^3;//SER2
+void initial595()	//列扫描74HC595初始化
+{
+	SH_CP = 0;
+	ST_CP = 0;
+	DS = 0;
+}
+void initial5952() //行扫描74HC595初始化
+{
+	SH_CP2 = 0;
+	ST_CP2 = 0;
+	DS2 = 0;
+}
+/*---------------   发送数据   ---------------*/
+void send_data(unsigned char d)
+{
+	unsigned char i;
+	for(i=0;i<8;i++)
+	{
+		DS = d&0x80;	 //发送最高位
+		SH_CP = 1;
+		SH_CP = 0;		 //移位寄存器移位
+		d = d<<1;		 //数据移位f
+	}
+}
+
+void xiansi1()				  //列扫描74HC595数据输出
+{	
+	send_data(buffer[0]);	  //u8
+	send_data(buffer[1]);	  //u7
+	send_data(buffer[2]);	  //u6
+	send_data(buffer[3]);	  //u5
+	send_data(buffer[4]);	  //u4
+	send_data(buffer[5]);	  //u3
+	send_data(buffer[6]);	  //u2
+	send_data(buffer[7]);	  //u1
+
+}
+void InitUart()
+{
+	    EADC=0; //AD中断关
+	    //sa=1;
+	   	  // BRT独立波特率发生器的溢出率= SYSclk / ( 256 - BRT )
+	     //11.0592M晶振 57600波特率
+	    PCON &= 0x7f;  //波特率不倍速    
+		SCON = 0x50;   //8位数据,可变波特率
+	    BRT = 0xF3;    //设定独立波特率发生器重装值	0xFA
+	    AUXR |= 0x04;  //独立波特率发生器时钟为Fosc,即1T
+	    AUXR |= 0x01;  //串口1选择独立波特率发生器为波特率发生器
+	    AUXR |= 0x10;  //启动独立波特率发生器   
+	    ES = 1;         //充许串口1中断 
+}
+ //***********************************************************************************************
+void disp_cube(unsigned char DZ_data[64])
+{	   unsigned char i;
+		for(i=0;i<64;i++)
+	   {
+		 display[0][i]=DZ_data[i];//这里的代码自己实现
+		}
+}
+
+  void shangwei()
+{	   
+		while(1)
+		{ 	  
+			  if(receive_sta)//接受完成
+	      {		    
+		            receive_sta=0;//清除接受成功标志,这步很重要
+	      }
+	                disp_cube(cube_frame+9);//如果接受命令时就时时刷新原来的点阵数据
+		}	   	
+}	
+
+void main()
+{ 	            InitUart();
+				initial595();  //初始化调用
+				initial5952(); //初始化调用
+				timer0init();  //初始化调用
+			    TR1=1;//启动定时器1
+				BB=0;					   	
+				bb=3;
+				ABL=0;
+				 
+				  shangwei();
+				 
+		
+}
+/*********************************************************************************************************************************************/
+ void print1() interrupt 3	 //定时器1中断函数
+{   	 
+        uchar i;		
+        static uchar layer=0;		 
+       for (i=0;i<8;i++)
+       {
+        buffer[i]=~display[layer][i];
+       }					
+			xiansi1();
+				  		
+		cheng=0x01<<layer;
+	    DS2 = ~cheng&0x01;	 //发送最低位
+		SH_CP2 = 1;
+		SH_CP2 = 0;
+	    ST_CP=1;	
+	    ST_CP=0;		 //移位寄存器移位	
+		ST_CP2=1;	
+	    ST_CP2=0;		
+		if (layer<7) 
+	                layer++;
+	            else 
+	                layer=0;       
+				    TH1=0xf0;
+			    	TL1=0xf0;
+					delay(2);
+		   		
+  		 //  	TR1=1;//启动定时器1
+}	 
+/***************************************************************************************************************************************/
+/*******************************************************************************************************************************************/
+ void UartIntterupt() interrupt 4
+{
+   unsigned char res=0;
+	if(RI==1)//进入到接受中断
+	{	
+	 	RI=0;
+		if(receive_sta==1)return;//如果接受完成啦就直接退出,等待main函数将数据给显示完	    
+		res=SBUF;
+		if(byte_cnt==0)cmd_type=res;//第一个字节为命令类型
+		switch(cmd_type)
+		{
+		   case 0xf5: //动画下载
+		     cube_frame[byte_cnt]=res;
+			 byte_cnt++;
+			 if(byte_cnt==73)
+			 { byte_cnt=0;
+			   receive_sta=1;//表示接受完成	
+			   }
+		     break;
+		 
+		   case 0xf1: //动画音量增加
+				k3=0;
+					delay2(50000);
+					delay2(50000);
+					delay2(50000);
+					delay2(50000);				
+					k3=1;
+		   		receive_sta=1;
+		     break;
+		   case 0xf0: //动画音量减小
+		            k2=0;
+					delay2(50000);
+					delay2(50000);
+					delay2(50000);
+					delay2(50000);								
+					k2=1;
+		        receive_sta=1;
+		     break;
+		   case 0xef: //上一曲
+		            k2=0;
+					delay2(20000);
+					k2=1;
+		        receive_sta=1;
+		     break;
+		   case 0xee: //下一曲
+				    k3=0;
+					delay2(20000);
+					k3=1;
+		        receive_sta=1;
+			 break;
+		   case 0xed: //eq音乐类型,摇滚,爵士,流行
+				    k1=0;
+					delay2(20000);
+					k1=1;
+		        receive_sta=1;
+		     break;
+		   case 0xec: //暂停与播放
+				    k1=0;
+					delay2(20000);
+					k1=1;
+		        receive_sta=1;
+		     break;
+		 
+		   case 0xea: //进入待机		       		
+			  	  	 IAP_CONTR=0x20;		  
+	 	  case 0xD2: //亮度
+		            ABL=~ABL;
+					receive_sta=1;				
+				    break;
+		  case 0xD3: //模式切换
+		            k3=0;
+					delay2(20000);
+					k3=1;
+					delay2(10000);
+					k3=0;
+					delay2(20000);
+					k3=1;
+					receive_sta=1;				
+				    break;
+		   default:break;//蓝牙的连接成功或者断开连接消息
+		}
+	}
+
+}

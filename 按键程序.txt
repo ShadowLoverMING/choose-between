@@ -1,0 +1,300 @@
+/**********************************************按键按键测试程序*******************************************/
+/*拨轮按键左显示心形 拨轮按键中全亮显示 拨轮按键右单层向上动态*/
+#include <STC12C5A60S2.H>
+#define uchar unsigned char 
+#define uint unsigned int
+sbit keyout=P0^2; //out
+sbit keyamenu=P0^0;//amenu
+sbit keymenu=P0^1;//menu
+char data menu,out,amenu,bb,num,cheng; //menu按键左，     out按键右，    amenu按键中，
+void timer0init(void)
+	{	
+				TMOD=0X12;	
+				EX0=1;
+				ET0=1;		 	        
+				EX1=0;
+				ET1=1;//定时器1开中断 		               
+				EA=1;		
+				TH1=0xc0;
+				TL1=0;	
+				IPH|=0X01;
+				PX0=1;
+				IT0=1;
+		        P1M0=0X7F;
+				P1M1=0X80;
+			    P0M0=0xf8;	//P0口开漏输出
+				P0M1=0xf0;	
+			    P3M0=0x00;	//P3口准双向输出
+				P3M1=0X00;
+				P2M0=0x00;	//P2口准双向输出
+				P2M1=0X00;			
+    }                                                        //sa串口中断，     bb延时变量，   num频谱显示，														//cheng行扫描变量，yanse颜色控制, liangdu亮度控制														//cheng行扫描变量，yanse颜色控制, liangdu亮度控制
+void delay(uint i)
+{											
+	char b;
+	while (i--)
+	{
+	   b=bb;
+		while(b--);
+	}
+}
+void delay2(uint t)
+{
+	int i;
+	while(t--)
+	for(i=0;i<5;i++);
+}
+
+void key_menu_scan()
+{
+	if(!keymenu)
+	{
+		delay2(10000);//按键驱抖
+	
+				if(!keymenu)
+				  {		
+					menu++;
+					out=0;
+					amenu=0;
+					if(menu==2)
+						menu=1;
+				    while(!keymenu);//释放判断
+				  }		
+	  		
+	}
+}
+void key_amenu_scan()
+{
+	if(!keyamenu)
+	{
+		delay2(10000);//按键驱抖
+				
+					if(!keyamenu)
+					  {		
+						amenu++;
+						out=0;
+						menu=0;
+						if(amenu==2)
+							amenu=1;
+						while(!keyamenu);//释放判断	
+					  }
+	    
+	}
+}
+void key_out_scan()
+{
+	if(!keyout)
+	{
+		delay2(10000);//按键驱抖				 
+
+					if(!keyout)
+					 {
+						out++;
+						amenu=0;
+						menu=0;			
+						if(out==2)
+							out=1;
+				  	    while(!keyout);//释放判断		
+					 }	  
+		 			
+	}
+}
+
+/**************************************************************************************************************************************/
+uchar data buffer[8]; //光立方显示一层的数据暂存数组
+/*定义管脚定义单片机用于发送数据给74HC595引脚和数据移位控制*/
+sbit SH_CP = P3^4; //SCK
+sbit ST_CP = P3^3;//RCK
+sbit DS    = P3^5;//SER
+sbit CH340 = P0^3;//SE
+sbit SH_CP2 = P2^6; //SCK2
+sbit ST_CP2 = P2^5;//RCK2
+sbit DS2    = P2^3;//SER2
+sbit RR=P3^6;//红
+sbit GG=P2^2;//绿
+sbit BB=P2^4;//蓝
+sbit ABL=P4^3;//亮度
+uchar code display1[8][8]={		 //图形1 全亮模式
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第1层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第2层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第3层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第4层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第5层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第6层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第7层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第8层
+};
+uchar code display2[8][8]={		 //图形2 心形模式
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第1层
+0x18,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第2层
+0x24,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第3层
+0x42,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第4层
+0x81,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第5层
+0x81,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第6层
+0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第7层
+0x66,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第8层
+};
+uchar code display3[8][8]={		 //图形3 每次亮一层动态模式
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第1层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第2层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第3层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第4层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第5层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第6层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第7层
+0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,//第8层
+};
+/*---------------   初始化   --------------*/
+void initial595()	 //列驱动初始化
+{
+		SH_CP = 0;
+		ST_CP = 0;
+		DS = 0;
+}
+  void initial5952() //行驱动初始化
+{
+		SH_CP2 = 0;
+		ST_CP2 = 0;
+		DS2 = 0;
+}
+/************************************延时函数**************************************************************/
+
+/************************************ 发送数据 ***************************************************************/
+void send_data(unsigned char d)//发送一层当中的一行显示数据，8位
+{
+		unsigned char i;
+		for(i=0;i<8;i++)
+		{
+			DS = d&0x80;//发送最低位
+			SH_CP = 1;
+			SH_CP = 0; //移位寄存器移位
+			d = d<<1; //数据移位f
+		}
+}
+
+void xiansi1()		              //一次发送1层，8行的显示数据，64位
+{	
+		send_data(buffer[0]);	  //u9
+		send_data(buffer[1]);	  //u8
+		send_data(buffer[2]);	  //u7
+		send_data(buffer[3]);	  //u6
+		send_data(buffer[4]);	  //u5
+		send_data(buffer[5]);	  //u4
+		send_data(buffer[6]);	  //u3
+		send_data(buffer[7]);	  //u2
+
+} 
+/*************************************************主函数*******************************************************************/
+void main()
+{  	   
+	   uchar d,dd,i,j,cheng;
+	   timer0init();	   
+	   initial595();
+	   initial5952();
+	   ABL=0;
+	   menu=1;
+	   out=0;
+	   bb=0;
+	   RR=1;  //红色控制
+	   GG=1;  //绿色控制
+	   BB=0;  //蓝色控制
+	   d=60000;
+	   dd=60000;
+	   
+  while(menu==1)					 //显示全亮
+  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=display1[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //行移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;       
+					delay(2);
+					key_amenu_scan();
+	                key_out_scan();
+		}
+	     
+
+	   }
+	  while(amenu==1)					 //显示心形
+  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=~display2[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //行移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;       
+					delay(2);
+	                key_menu_scan();
+	                key_out_scan();
+		}
+	     
+
+	   }
+	   while(out==1)				 //一层一层的动态显示
+  {
+	   static uchar layer=0;	
+	  for(j=0;j<8;j++)				 //LED正极驱动循环扫描8层
+	  {			        	
+       for (i=0;i<8;i++)			 //循环8次，每一次将光立方的一层动画数据装入buffer[]数组
+       {
+        buffer[i]=display3[layer][i]; //调用层暂存数组将用于光立方显示的二维数组里的一层显示数据装入其中
+       }					
+			xiansi1();				 //单片机发送数据给74HC595 			 
+		 	cheng=0x01<<layer;		 //行移位，
+	    DS2 = ~cheng&0x01;	         //发送层扫描数据
+		SH_CP2 = 1;
+		SH_CP2 = 0;		             //移位寄存器移位
+		ST_CP=1;	
+	    ST_CP=0;					 //控制显示列
+		ST_CP2=1;	
+	    ST_CP2=0;					 //控制显示层
+		if (layer<7) 
+	                layer++;	     //为扫面上一层 做准备（光立方一个静止图形是从最底层开始扫描）
+	        else 
+	                layer=0;
+					key_amenu_scan();
+	                key_menu_scan();
+	                if(out==0)
+			       {	
+				    break;
+			       }       
+					delay(65535);
+					delay(65535);
+					delay(65535);
+					delay(65535);
+		}
+	     
+
+	   } 
+
+
+}

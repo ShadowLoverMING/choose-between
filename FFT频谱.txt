@@ -1,0 +1,426 @@
+#include <STC12C5A60S2.H>
+#define uchar unsigned char 
+#define uint unsigned int
+sbit RR=P3^6;//红
+sbit GG=P2^2;//绿
+sbit BB=P2^4;//蓝
+sbit AK=P1^1;//外部音源
+sbit BK=P1^2;//内部音源
+sbit ABL=P4^3;//亮度
+char data menu,out,amenu,sa,bb,num,cheng,yanse,liangdu; //menu按键左，     out按键右，    amenu按键中，
+                                                        //sa串口中断，     bb延时变量，   num频谱显示，														//cheng行扫描变量，yanse颜色控制, liangdu亮度控制
+char yp=1;
+uint yinpin;
+void timer0init(void)	//初始化函数特殊功能寄存器配置
+	{
+			BB=0;
+			GG=1;
+			RR=1;
+			TMOD=0X12;	
+			//EX0=1; //外部中断0开
+			//ET0=1; //定时器0中断开		 	        
+			//EX1=0; //
+			ET1=1;//定时器1开中断 		               
+			EA=1; //总中断打开		
+			//TH1=0x10;
+			//TL1=0x00;
+			IPH|=0X01;
+			PX0=1;
+			IT0=1;
+			 P1M0=0X7F;
+		     P1M1=0X80;
+			P0M0=0xf8;	//P0口开漏输出
+			P0M1=0xf0;	
+			P3M0=0x00;	//P0口准双向输出
+			P3M1=0X00;
+			P2M0=0x00;	//P2口准双向输出
+			P2M1=0X00;			
+}
+/*************************************************************************************************************************/
+void delay(int i)// 延时 bb速度控制
+{											
+	char b;
+	while (i--)
+	{
+	   b=bb;
+	   while(b--);
+	}
+}
+
+/*************************************************************************************************************************/
+/******************************************74HC595数据发送函数************************************************************/
+/*************************************************************************************************************************/
+sbit SH_CP = P3^4; //SCK
+sbit ST_CP = P3^3;//RCK
+sbit DS    = P3^5;//SER
+sbit SH_CP2 = P2^6; //SCK2
+sbit ST_CP2 = P2^5;//RCK2
+sbit DS2    = P2^3;//SER2
+void initial595()	//列扫描74HC595初始化
+{
+	SH_CP = 0;
+	ST_CP = 0;
+	DS = 0;
+}
+void initial5952() //行扫描74HC595初始化
+{
+	SH_CP2 = 0;
+	ST_CP2 = 0;
+	DS2 = 0;
+}
+/*---------------   发送数据   ---------------*/
+
+void send_data2(unsigned char d) //行扫描74HC595数据输出
+{			  			 
+	unsigned char i;
+	for(i=0;i<8;i++)
+	{
+		DS2 = d&0X80;	 //发送最高位
+		SH_CP2 = 1;
+		SH_CP2 = 0;		 //移位寄存器移位
+		d = d<<1;	    //数据移位
+	}
+        ST_CP2=1;	
+	    ST_CP2=0;	
+}
+
+/**********************************************************************************************************************/
+
+/*******************************************************************************************************************************/
+void sendbyte1(unsigned int num1,unsigned int num2,unsigned int num3,unsigned int num4)	//列扫描74HC595输出
+{
+	 unsigned char i=0;
+	 for(i=0;i<8;i++)
+	 { 
+		DS = num1&0x01;	 //发送最低位
+		SH_CP = 1;
+		SH_CP = 0;		 //移位寄存器移位
+	    num1=num1>>1;	 //数据移位
+	 }
+
+	 for(i=0;i<8;i++)
+	 {
+		DS = num2&0x01;	 //发送最低位
+		SH_CP = 1;
+		SH_CP = 0;		 //移位寄存器移位
+		num2 = num2>>1;	 //数据移位
+	 }
+
+	for(i=0;i<8;i++)
+	{
+		DS = num3&0x01;	 //发送最低位
+		SH_CP = 1;
+		SH_CP = 0;		 //移位寄存器移位
+		num3 = num3>>1;	 //数据移位
+	}
+
+	 for(i=0;i<8;i++)
+	 {
+		DS = num4&0x01;	 //发送最低位
+		SH_CP = 1;
+		SH_CP = 0;		 //移位寄存器移位
+		num4 = num4>>1;	 //数据移位
+	 }
+   
+}					
+/*音柱编码*/
+uchar code BRTable[64] ={ 0,32,16,48,8,40,24,56,4,36,20,52,12,44,28,60,2,34,18,50,10,42,26,58,6,38,22,54,14,46,30,62,1,33,17,49,9,41,25,57,5,37,21,53,13,45,29,61,3,35,19,51,11,43,27,59,7,39,23,55,15,47,31,63};
+char code sin_tabb[64] = { 0 ,12 ,25 ,37 ,49 ,60 ,71 ,81 ,90 ,98 ,106 ,112 ,117 ,122 ,125 ,126 ,127 ,126 ,125 ,122 ,117 ,112 ,106 ,98 ,90 ,81 ,71 ,60 ,49 ,37 ,25 ,12 ,0 ,-12 ,-25 ,-37 ,-49 ,-60 ,-71 ,-81 ,-90 ,-98 ,-106 ,-112 ,-117 ,-122 ,-125 ,-126 ,-127 ,-126 ,-125 ,-122 ,-117 ,-112 ,-106 ,-98 ,-90 ,-81 ,-71 ,-60 ,-49 ,-37 ,-25 ,-12  }; 
+char code cos_tabb[64] = {127 ,126 ,125 ,122 ,117 ,112 ,106 ,98 ,90 ,81 ,71 ,60 ,49 ,37 ,25 ,12 ,0 ,-12 ,-25 ,-37 ,-49 ,-60 ,-71 ,-81 ,-90 ,-98 ,-106 ,-112 ,-117 ,-122 ,-125 ,-126 ,-127 ,-126 ,-125 ,-122 ,-117 ,-112 ,-106 ,-98 ,-90 ,-81 ,-71 ,-60 ,-49 ,-37 ,-25 ,-12 ,0 ,12 ,25 ,37 ,49 ,60 ,71 ,81 ,90 ,98 ,106 ,112 ,117 ,122 ,125 ,126 };
+char data c[8];//用于存储5个不同频率的幅值
+char data b[8];//用于使音谱柱形显示的平滑
+int xdata Real[64];//实部 
+int xdata Image[64];//虚部
+/*音柱编码*/
+uchar code tuku1[]={0x01,0x03,0x07,0x0f,0x1f,0x3f,0x7f,0xff,};//音频显示方式1
+uchar code tuku2[]={0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,};//音频显示方式3
+uchar code tuku3[]={0x00,0x10,0x18,0x38,0x3c,0x7c,0x7e,0xff,};//音频显示方式3
+uchar code table1[]={0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};//音频显示频段1
+uchar code table2[]={
+0Xe0,0Xe0,0Xe0,0xe0,0Xe0,0Xe0,0Xe0,0Xe0,
+0X07,0X07,0X07,0X07,0X07,0X07,0X07,0X07
+};//音频显示频段2
+uchar code table3[]={
+0Xf0,0Xe0,0Xc0,0x80,0X00,0X00,0X00,0X00,
+0X03,0X07,0X0e,0x1c,0X38,0X70,0Xe0,0Xc0,
+0X00,0X00,0X00,0X00,0X01,0X03,0X07,0X0f
+};//音频显示频段3
+uchar code table4[]={
+0Xc0,0Xc0,0X00,0x00,0X00,0X00,0X00,0X00,
+0X00,0X00,0X30,0x30,0X00,0X00,0X00,0X00,
+0X00,0X00,0X00,0X00,0X0c,0X0c,0X00,0X00,
+0X00,0X00,0X00,0X00,0X00,0X00,0X03,0X03
+};	//音频显示频段4
+uchar code table5[]={
+0Xc0,0Xc0,0X00,0x00,0X00,0X00,0X00,0X00,
+0X18,0X18,0X00,0x00,0X00,0X00,0X00,0X00,
+0X03,0X03,0X00,0X00,0X00,0X00,0X00,0X00,
+0X00,0X00,0X00,0X03,0X03,0X00,0X00,0X00,
+0X00,0X00,0X00,0X00,0X00,0X00,0X03,0X03
+}; //音频显示频段5
+uchar code table6[]={
+0x0f,0x0f,0x0f,0x0f,0x00,0x00,0x00,0x00,
+0Xc0,0Xc0,0X00,0x00,0X00,0X00,0X00,0X00,
+0X00,0X00,0X00,0xc0,0Xc0,0X00,0X00,0X00,
+0X00,0X00,0X00,0X00,0X00,0X00,0xc0,0Xc0,
+0X00,0X00,0X00,0X00,0X00,0X00,0X18,0X18,
+0X00,0X00,0X00,0X00,0X00,0X00,0X03,0X03
+}; //音频显示频段6
+uchar code table7[]={
+0X00,0X00,0X00,0x00,0X00,0X00,0X00,0X01,
+0X00,0X00,0X00,0x00,0X00,0X00,0X03,0X03,
+0X00,0X00,0X00,0X00,0X00,0X07,0x04,0X04,
+0X00,0X00,0X00,0X00,0X0f,0X08,0X08,0X08,
+0X00,0X00,0X00,0X1f,0X10,0X10,0X10,0X10,
+0X00,0X00,0X2f,0x20,0x20,0X20,0X20,0X20,
+0X00,0X7f,0X40,0x40,0x40,0X40,0X40,0X40
+}; //音频显示频段7
+uchar code table8[]={
+0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,
+0x40,0x40,0x40,0x40,0x40,0x40,0x40,0x40,
+0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
+0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
+0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,
+0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,
+0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,
+0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,
+}; //音频显示频段8
+int STC_ADC()	//启动ADC转换读取数据后返回值
+{
+			uchar i;
+			ADC_RES=0;
+			ADC_RESL=0;
+			ADC_CONTR=0x88;
+			i=3;
+			while(i--);
+        while(1)                      
+        {
+			if(ADC_CONTR&0x10) //判断A转换完成      
+			break;
+         }
+			ADC_CONTR=0x80;	  //AD电源打开
+			return(ADC_RESL+ADC_RES<<2);//返回采集值
+}
+short sqrt_16( unsigned long M)   
+{
+			unsigned int N,i;
+			unsigned long tmp,ttp; 
+			if(M==0)             
+			return 0;
+			N=0;
+			tmp=(M>>30);        
+			M<<=2;
+    if(tmp>1)            
+    {
+			N++;               
+			tmp-=N;
+    }
+    for(i=15;i>0;i--)   
+    {
+			N<<=1;           
+			tmp<<=2;
+			tmp+=(M>>30);  
+			ttp=N;
+			ttp=(ttp<<1)+1;
+			M<<=2;
+        if(tmp>=ttp)    
+        {
+            tmp-=ttp;
+            N++;
+        }       
+    }
+    return N;
+}
+/*********************************************************************************************************************/
+//fft运算函数，入口STC_ADC()；出口c[];
+void FFT()	
+{
+			int xdata i,bb,j,k,p;
+			int max,a[8];
+			int xdata TR,TI,temp;
+  	     for(i=0; i<64;i++)
+	      {
+			Real[BRTable[i]]= STC_ADC();
+			Image[i]=0;
+	      }
+  for(i=1;i<=6;i++)                          
+   {     	bb=1;
+			bb<<=(i-1);                                      
+    for(j=0;j<=bb-1;j++)                            
+     { 		p=1;
+			p<<=(6-i);            
+			p=p*j;
+      for(k=j;k<64;k=k+2*bb)               
+       { 
+ 			
+		if(amenu==1)//1频段列显示		
+		  {
+			sendbyte1(~table1[num*8+0],~table1[num*8+1],~table1[num*8+2],~table1[num*8+3]);
+			sendbyte1(~table1[num*8+4],~table1[num*8+5],~table1[num*8+6],~table1[num*8+7]);
+			ST_CP=1;	
+			ST_CP=0;
+		   } 
+		else if(amenu==2) //2频段列显示
+		  {
+			sendbyte1(~table2[num*8+0],~table2[num*8+1],~table2[num*8+2],~table2[num*8+3]);
+			sendbyte1(~table2[num*8+4],~table2[num*8+5],~table2[num*8+6],~table2[num*8+7]);
+			ST_CP=1;	
+			ST_CP=0;
+		   }  
+		else if(amenu==3)  //3频段列显示
+		 {
+			sendbyte1(~table3[num*8+0],~table3[num*8+1],~table3[num*8+2],~table3[num*8+3]);
+			sendbyte1(~table3[num*8+4],~table3[num*8+5],~table3[num*8+6],~table3[num*8+7]);
+			ST_CP=1;	
+			ST_CP=0;
+		  }	
+		else if(amenu==4)  //4频段列显示
+		 {
+			sendbyte1(~table4[num*8+0],~table4[num*8+1],~table4[num*8+2],~table4[num*8+3]);
+			sendbyte1(~table4[num*8+4],~table4[num*8+5],~table4[num*8+6],~table4[num*8+7]);
+			ST_CP=1;	
+			ST_CP=0;
+		  }	
+		else if(amenu==5) //5频段列显示
+		 {
+			sendbyte1(~table5[num*8+0],~table5[num*8+1],~table5[num*8+2],~table5[num*8+3]);
+			sendbyte1(~table5[num*8+4],~table5[num*8+5],~table5[num*8+6],~table5[num*8+7]);
+			ST_CP=1;	
+			ST_CP=0;
+		  }  
+		else if(amenu==6) //6频段列显示
+		 {
+			sendbyte1(~table6[num*8+7],~table6[num*8+6],~table6[num*8+5],~table6[num*8+4]);
+			sendbyte1(~table6[num*8+3],~table6[num*8+2],~table6[num*8+1],~table6[num*8+0]);
+			ST_CP=1;	
+			ST_CP=0;
+		 }  	  
+		else if(amenu==7)  //7频段列显示
+		 {
+			sendbyte1(~table7[num*8+7],~table7[num*8+6],~table7[num*8+5],~table7[num*8+4]);
+			sendbyte1(~table7[num*8+3],~table7[num*8+2],~table7[num*8+1],~table7[num*8+0]);
+			ST_CP=1;	
+			ST_CP=0;
+		  }
+		else 			  //8频段列显示
+		 {
+			sendbyte1(~table8[num*8+7],~table8[num*8+6],~table8[num*8+5],~table8[num*8+4]);
+			sendbyte1(~table8[num*8+3],~table8[num*8+2],~table8[num*8+1],~table8[num*8+0]);
+			ST_CP=1;	
+			ST_CP=0;
+		  }  
+			TR = Real[k]; 
+			TI = Image[k];
+			temp=Real[k+bb];
+			Real[k]=Real[k]+((Real[k+bb]*cos_tabb[p])>>7)+((Image[k+bb]*sin_tabb[p])>>7);
+			Image[k]=Image[k]-((Real[k+bb]*sin_tabb[p])>>7)+((Image[k+bb]*cos_tabb[p])>>7);
+			Real[k+bb]=TR-((Real[k+bb]*cos_tabb[p])>>7)-((Image[k+bb]*sin_tabb[p])>>7);
+			Image[k+bb]=TI+((temp*sin_tabb[p])>>7)-((Image[k+bb]*cos_tabb[p])>>7); 
+			Real[k]>>=1;             
+			Image[k]>>=1; 
+			Real[k+bb]>>=1;                 
+			Image[k+bb]>>=1; 
+        }//for(k=j;k<64;k=k+2*bb) 
+     }//for(j=0;j<=bb-1;j++) 
+  }//for(i=1;i<=6;i++)
+			max=0;
+		for(i=0;i<6;i++)
+		 {
+			a[i]=sqrt_16((Real[i+1]*Real[i+1]+Image[i+1]*Image[i+1])>>1);
+			if(a[i]<1 )     
+			a[i]=0;
+			else
+			a[i]-=1;
+			if(max<a[i])
+			max=a[i];
+		  }
+		if(max>8)
+		 {
+			max/=8;
+		    for(i=0;i<8;i++)
+			a[i]/=max;
+		  }
+			for(i=0;i<9;i++)
+			c[i]=a[i];
+}
+
+/*********************************************************************************************************************************/
+void audio()
+{
+				ES = 0;//关闭串口中断防止窗口对AD的干扰
+				P1ASF = 0x01;//将p1.0作为AD输入	
+				TH0=(65536-4000)/256;//定时166.7us	
+				TL0=(65536-4000)%256;
+				EADC=1; //AD中断打开	
+				TR1=1;	//启动定时器1
+				while(1)
+		       {				
+		 	     FFT();
+	 	       }						
+				
+}
+
+/*****************************************************************************************************************************/
+void main()
+{ 	            
+				initial595();  //初始化调用
+				initial5952(); //初始化调用
+				timer0init();  //初始化调用					   
+				amenu=1;	
+				bb=3;
+				ABL=0;  
+				AK=1;//外部音源
+                BK=1 ;//内部音源 
+			//	ld=0;
+			 audio();
+}
+ void print1() interrupt 3	 //定时器1中断函数
+{  
+				TR1=0;		//关闭定时器1
+				TH1=(65536-2500)/256;  //定时  time = F63C ;104.1us
+				TL1=(65536-2500)%256;
+				if(num>=(amenu-1))
+					num=0;
+				else
+					num++;
+				if(b[num]<c[num])	  //确定频谱高度显示
+				{b[num]++;}				        							
+				if(b[num]>c[num])	  //确定频谱高度显示
+				{b[num]--;}		        						
+				if(b[num]>8)		  //确定频谱高度显示
+				{b[num]=8;}	        
+						   	  
+	switch(yp) // 频谱显示方式显示切换
+	{	 
+		case 1:	send_data2(~tuku2[b[num]]);
+	            if(amenu<=2){}
+			    else delay(50);
+				break;  
+	    case 2:	send_data2(~tuku1[b[num]]);
+				if(amenu<=2){}
+				else delay(50);
+				break; 
+	    case 3:	send_data2(~tuku3[b[num]]);
+				if(amenu<=2){}
+				else delay(50);				
+				default:break;
+    }
+  			   	TR1=1;//启动定时器1
+}	          
+/************************************************************************************************************************************/
+void ADC_Finish() interrupt 5	 //AD中断函数
+ {	   	
+			 
+			 	yinpin++;
+		   if(yinpin==20000)	//变量yinpin加到20000切换频段显示
+			 {  
+			    yinpin=0;
+				yp++;
+				if(yp==4)	   
+				yp=1;				   	   
+				amenu++;			//amenu变量切换频段显示方式
+				if(amenu==9)amenu=1;				   
+			  }	                
+			 	if(ADC_CONTR&0x10)  //判断ADC-FLGA位是否为1，为1表明A/D已转换完成。     	      
+			    delay(1);	  						 
+ }	 
